@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.report.mapper.ReportMapper">
+ <sql id="dateSubmitted">t.submitted_at&gt;=#{from} AND t.submitted_at&lt;#{to}</sql>
+ <sql id="dateCompleted">t.completed_at&gt;=#{from} AND t.completed_at&lt;#{to}</sql>
+ <sql id="open">t.status NOT IN ('COMPLETED','CANCELLED','REJECTED')</sql>
+ <select id="tickets" resultType="com.gaofeng.repair.report.domain.ReportTotals">SELECT COALESCE(SUM(<include refid="dateSubmitted"/>),0) submitted,
+ COALESCE(SUM((<include refid="dateSubmitted"/>) AND t.status='COMPLETED'),0) cohort_completed,COALESCE(SUM(<include refid="dateCompleted"/>),0) completed,
+ COALESCE(SUM(<include refid="open"/>),0) `open`,AVG(CASE WHEN <include refid="dateCompleted"/> THEN TIMESTAMPDIFF(MICROSECOND,t.first_started_at,t.completed_repair_at)/1000000.0 END) average_repair_seconds,
+ AVG(CASE WHEN <include refid="dateCompleted"/> THEN TIMESTAMPDIFF(MICROSECOND,t.submitted_at,t.completed_at)/1000000.0 END) average_cycle_seconds FROM repair_tickets t <where><if test="storeId!=null">t.store_id=#{storeId}</if></where></select>
+ <select id="purchases" resultType="com.gaofeng.repair.report.domain.ReportTotals">SELECT COALESCE(SUM(p.confirmed_total),0) purchase_amount,
+ AVG(CASE WHEN p.status='RECEIVED' THEN TIMESTAMPDIFF(MICROSECOND,p.ordered_at,p.received_at)/1000000.0 END) average_arrival_seconds
+ FROM repair_purchase_orders p JOIN repair_tickets t ON t.id=p.ticket_id WHERE p.status IN ('ORDERED','PARTIALLY_RECEIVED','RECEIVED') AND p.ordered_at&gt;=#{from} AND p.ordered_at&lt;#{to}<if test="storeId!=null"> AND t.store_id=#{storeId}</if></select>
+ <select id="costs" resultType="com.gaofeng.repair.report.domain.ReportTotals">SELECT COALESCE(SUM(c.ticket_id IS NULL),0) pending_costs,COUNT(c.ticket_id) confirmed_costs,
+ COALESCE(SUM(CASE WHEN c.ticket_id IS NOT NULL THEN COALESCE(p.confirmed_total,0)+c.labor_amount+c.other_amount END),0) completed_cost_amount
+ FROM repair_tickets t LEFT JOIN repair_cost_confirmations c ON c.ticket_id=t.id LEFT JOIN repair_purchase_orders p ON p.ticket_id=t.id AND p.status IN ('ORDERED','PARTIALLY_RECEIVED','RECEIVED')
+ WHERE t.status='COMPLETED' AND <include refid="dateCompleted"/><if test="storeId!=null"> AND t.store_id=#{storeId}</if></select>
+ <select id="storeCount" resultType="long">SELECT COUNT(*) FROM repair_stores <where><if test="storeId!=null">id=#{storeId}</if></where></select>
+ <select id="stores" resultType="com.gaofeng.repair.report.domain.ReportGroup">SELECT s.id,s.name,s.region,COALESCE(q.submitted,0) submitted,COALESCE(q.completed,0) completed,COALESCE(q.open,0) `open`,COALESCE(c.pending_costs,0) pending_costs,COALESCE(p.purchase_amount,0) purchase_amount,COALESCE(c.completed_cost_amount,0) completed_cost_amount,q.average_repair_seconds
+ FROM repair_stores s
+ LEFT JOIN (SELECT t.store_id,SUM(t.submitted_at&gt;=#{period.from} AND t.submitted_at&lt;#{period.to}) submitted,SUM(t.completed_at&gt;=#{period.from} AND t.completed_at&lt;#{period.to}) completed,SUM(<include refid="open"/>) `open`,AVG(CASE WHEN t.completed_at&gt;=#{period.from} AND t.completed_at&lt;#{period.to} THEN TIMESTAMPDIFF(MICROSECOND,t.first_started_at,t.completed_repair_at)/1000000.0 END) average_repair_seconds FROM repair_tickets t GROUP BY t.store_id) q ON q.store_id=s.id
+ LEFT JOIN (SELECT t.store_id,SUM(p.confirmed_total) purchase_amount FROM repair_purchase_orders p JOIN repair_tickets t ON t.id=p.ticket_id WHERE p.status IN ('ORDERED','PARTIALLY_RECEIVED','RECEIVED') AND p.ordered_at&gt;=#{period.from} AND p.ordered_at&lt;#{period.to} GROUP BY t.store_id) p ON p.store_id=s.id
+ LEFT JOIN (SELECT t.store_id,SUM(c.ticket_id IS NULL) pending_costs,SUM(CASE WHEN c.ticket_id IS NOT NULL THEN COALESCE(p.confirmed_total,0)+c.labor_amount+c.other_amount END) completed_cost_amount FROM repair_tickets t LEFT JOIN repair_cost_confirmations c ON c.ticket_id=t.id LEFT JOIN repair_purchase_orders p ON p.ticket_id=t.id AND p.status IN ('ORDERED','PARTIALLY_RECEIVED','RECEIVED') WHERE t.status='COMPLETED' AND t.completed_at&gt;=#{period.from} AND t.completed_at&lt;#{period.to} GROUP BY t.store_id) c ON c.store_id=s.id
+ <where><if test="period.storeId!=null">s.id=#{period.storeId}</if></where> ORDER BY s.id LIMIT #{size} OFFSET #{offset}</select>
+ <select id="engineerCount" resultType="long">SELECT COUNT(*) FROM repair_members WHERE role='ENGINEER'</select>
+ <select id="engineers" resultType="com.gaofeng.repair.report.domain.ReportGroup">SELECT m.user_id id,m.display_name name,COALESCE(q.completed,0) completed,COALESCE(q.open,0) `open`,COALESCE(q.returned,0) returned,q.average_repair_seconds
+ FROM repair_members m LEFT JOIN (SELECT t.assignee_id,SUM(t.completed_at&gt;=#{period.from} AND t.completed_at&lt;#{period.to}) completed,SUM(<include refid="open"/>) `open`,SUM(CASE WHEN t.completed_at&gt;=#{period.from} AND t.completed_at&lt;#{period.to} THEN COALESCE(r.returned,0) ELSE 0 END) returned,AVG(CASE WHEN t.completed_at&gt;=#{period.from} AND t.completed_at&lt;#{period.to} THEN TIMESTAMPDIFF(MICROSECOND,t.first_started_at,t.completed_repair_at)/1000000.0 END) average_repair_seconds
+ FROM repair_tickets t LEFT JOIN (SELECT ticket_id,COUNT(*) returned FROM repair_ticket_events WHERE action='return' GROUP BY ticket_id) r ON r.ticket_id=t.id <where><if test="period.storeId!=null">t.store_id=#{period.storeId}</if></where> GROUP BY t.assignee_id) q ON q.assignee_id=m.user_id WHERE m.role='ENGINEER' ORDER BY m.user_id LIMIT #{size} OFFSET #{offset}</select>
+ <select id="engineerDispatch" resultType="com.gaofeng.repair.report.api.dto.ReportDtos$EngineerDispatchRow">
+ SELECT m.user_id id,m.display_name name,m.contact_phone,m.status member_status,
+ COALESCE(q.assigned,0) assigned,COALESCE(q.accepted,0) accepted,COALESCE(q.in_progress,0) in_progress,
+ COALESCE(q.waiting_acceptance,0) waiting_acceptance,COALESCE(q.current_open,0) current_open
+ FROM repair_members m LEFT JOIN (
+   SELECT assignee_id,SUM(status='ASSIGNED') assigned,SUM(status='ACCEPTED') accepted,
+   SUM(status='IN_PROGRESS') in_progress,SUM(status='WAITING_ACCEPTANCE') waiting_acceptance,COUNT(*) current_open
+   FROM repair_tickets WHERE assignee_id IS NOT NULL AND status IN ('ASSIGNED','ACCEPTED','IN_PROGRESS','WAITING_ACCEPTANCE') GROUP BY assignee_id
+ ) q ON q.assignee_id=m.user_id
+ WHERE m.role='ENGINEER' ORDER BY COALESCE(q.current_open,0) DESC,m.user_id LIMIT #{size} OFFSET #{offset}
+ </select>
+ <sql id="dispatchScope">t.assignee_id=#{engineerId} AND t.status IN ('ASSIGNED','ACCEPTED','IN_PROGRESS','WAITING_ACCEPTANCE')<if test="status!=null"> AND t.status=#{status}</if></sql>
+ <select id="dispatchTicketCount" resultType="long">SELECT COUNT(*) FROM repair_tickets t WHERE <include refid="dispatchScope"/></select>
+ <select id="dispatchTickets" resultType="com.gaofeng.repair.report.api.dto.ReportDtos$DispatchTicket">
+ SELECT t.id,t.ticket_no,t.title,s.name store_name,t.priority,t.status,t.assigned_at
+ FROM repair_tickets t JOIN repair_stores s ON s.id=t.store_id WHERE <include refid="dispatchScope"/>
+ ORDER BY (t.priority='URGENT') DESC,t.assigned_at,t.id LIMIT #{size} OFFSET #{offset}
+ </select>
+ <select id="faults" resultType="com.gaofeng.repair.report.api.dto.ReportDtos$FacilityFault">SELECT NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.facility_snapshot,'$.brand')),'null') brand,NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.facility_snapshot,'$.model')),'null') model,COUNT(*) count FROM repair_tickets t WHERE <include refid="dateSubmitted"/><if test="storeId!=null"> AND t.store_id=#{storeId}</if> GROUP BY brand,model ORDER BY count DESC,brand,model LIMIT 100</select>
+ <select id="purchaseRanks" resultType="com.gaofeng.repair.report.api.dto.ReportDtos$PurchaseRank">SELECT i.name,i.brand,i.model,SUM(i.quantity) quantity,CAST(SUM(i.quantity*i.unit_price) AS CHAR) amount FROM repair_purchase_items i JOIN repair_purchase_orders p ON p.id=i.purchase_order_id JOIN repair_tickets t ON t.id=p.ticket_id WHERE p.status IN ('ORDERED','PARTIALLY_RECEIVED','RECEIVED') AND p.ordered_at&gt;=#{from} AND p.ordered_at&lt;#{to}<if test="storeId!=null"> AND t.store_id=#{storeId}</if> GROUP BY i.name,i.brand,i.model ORDER BY quantity DESC,i.name,i.brand,i.model LIMIT 100</select>
+ <sql id="scope">(#{role}='HQ_ADMIN' OR (#{role}='ENGINEER' AND t.assignee_id=#{actor}) OR (#{role}='STORE_MANAGER' AND EXISTS(SELECT 1 FROM repair_member_stores ms WHERE ms.user_id=#{actor} AND ms.store_id=t.store_id)))</sql>
+ <select id="statuses" resultType="com.gaofeng.repair.report.api.dto.ReportDtos$StatusCount">SELECT t.status,COUNT(*) count FROM repair_tickets t WHERE <include refid="scope"/> GROUP BY t.status</select>
+ <select id="tasks" resultType="com.gaofeng.repair.report.api.dto.ReportDtos$Task">SELECT t.id,t.ticket_no,t.title,s.name store_name,t.status,t.priority,t.submitted_at FROM repair_tickets t JOIN repair_stores s ON s.id=t.store_id WHERE <include refid="scope"/> AND
+ <choose><when test="role=='ENGINEER'">t.status IN ('ASSIGNED','ACCEPTED','IN_PROGRESS')</when><when test="role=='STORE_MANAGER'">t.status='WAITING_ACCEPTANCE'</when><otherwise>t.status IN ('SUBMITTED','WAITING_PROCUREMENT','READY_FOR_DISPATCH','WAITING_ACCEPTANCE')</otherwise></choose>
+ ORDER BY (t.priority='URGENT') DESC,t.submitted_at,t.id LIMIT 10</select>
+ <select id="overdue" resultType="long">SELECT COUNT(*) FROM repair_tickets t WHERE <include refid="scope"/> AND
+ ((t.status='SUBMITTED' AND DATE_ADD(t.submitted_at,INTERVAL #{reviewHours} HOUR)&lt;UTC_TIMESTAMP(3)) OR
+ (t.status='ASSIGNED' AND DATE_ADD(t.assigned_at,INTERVAL #{acceptHours} HOUR)&lt;UTC_TIMESTAMP(3)) OR
+ (t.status='IN_PROGRESS' AND DATE_ADD(t.first_started_at,INTERVAL #{repairHours} HOUR)&lt;UTC_TIMESTAMP(3)) OR
+ (t.status='WAITING_ACCEPTANCE' AND DATE_ADD(t.submitted_for_acceptance_at,INTERVAL #{acceptanceHours} HOUR)&lt;UTC_TIMESTAMP(3)))</select>
+ <select id="export" resultType="com.gaofeng.repair.report.domain.ExportRow">SELECT t.ticket_no,t.title,s.name store_name,t.status,JSON_UNQUOTE(JSON_EXTRACT(t.facility_snapshot,'$.facilityName')) facility_name,NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.facility_snapshot,'$.brand')),'null') original_brand,NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.facility_snapshot,'$.model')),'null') original_model,m.display_name assignee_name,t.submitted_at,t.completed_at,COALESCE(p.confirmed_total,0) purchase_amount,
+ CASE WHEN c.ticket_id IS NOT NULL THEN COALESCE(p.confirmed_total,0)+c.labor_amount+c.other_amount END total_amount
+ FROM repair_tickets t JOIN repair_stores s ON s.id=t.store_id LEFT JOIN repair_members m ON m.user_id=t.assignee_id LEFT JOIN repair_purchase_orders p ON p.ticket_id=t.id AND p.status IN ('ORDERED','PARTIALLY_RECEIVED','RECEIVED') LEFT JOIN repair_cost_confirmations c ON c.ticket_id=t.id
+ WHERE <include refid="dateSubmitted"/><if test="storeId!=null"> AND t.store_id=#{storeId}</if> ORDER BY t.id LIMIT 10001</select>
+</mapper>

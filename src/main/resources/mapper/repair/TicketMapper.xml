@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.ticket.mapper.TicketMapper">
+ <sql id="projection">t.*,s.name AS store_name,c.name AS category_name,m.display_name AS assignee_name</sql>
+ <sql id="joins">FROM repair_tickets t JOIN repair_stores s ON s.id=t.store_id JOIN repair_categories c ON c.id=t.category_id LEFT JOIN repair_members m ON m.user_id=t.assignee_id</sql>
+ <select id="ticket" resultType="com.gaofeng.repair.ticket.domain.Ticket">SELECT <include refid="projection"/> <include refid="joins"/> WHERE t.id=#{id}</select>
+ <select id="lockTicket" resultType="com.gaofeng.repair.ticket.domain.Ticket">SELECT * FROM repair_tickets WHERE id=#{id} FOR UPDATE</select>
+ <sql id="filter">
+  WHERE (#{role}='HQ_ADMIN' OR (#{role}='ENGINEER' AND t.assignee_id=#{actor}) OR (#{role}='STORE_MANAGER' AND EXISTS(SELECT 1 FROM repair_member_stores ms WHERE ms.user_id=#{actor} AND ms.store_id=t.store_id)))
+  <if test="storeId!=null">AND t.store_id=#{storeId}</if><if test="status!=null">AND t.status=#{status}</if><if test="priority!=null">AND t.priority=#{priority}</if><if test="assignee!=null">AND t.assignee_id=#{assignee}</if>
+  <if test="from!=null">AND t.submitted_at&gt;=#{from}</if><if test="to!=null">AND t.submitted_at&lt;#{to}</if>
+  <if test="keyword!=null">AND (t.ticket_no LIKE #{keyword} ESCAPE '!' OR t.title LIKE #{keyword} ESCAPE '!' OR JSON_UNQUOTE(JSON_EXTRACT(t.facility_snapshot,'$.facilityName')) LIKE #{keyword} ESCAPE '!')</if>
+ </sql>
+ <select id="list" resultType="com.gaofeng.repair.ticket.domain.Ticket">SELECT <include refid="projection"/> <include refid="joins"/> <include refid="filter"/> ORDER BY t.submitted_at DESC,t.id DESC LIMIT #{size} OFFSET #{offset}</select>
+ <select id="count" resultType="long">SELECT COUNT(*) FROM repair_tickets t <include refid="filter"/></select>
+ <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_tickets(ticket_no,store_id,reporter_id,asset_id,category_id,title,description,facility_snapshot,contact_name,contact_phone,priority,status,procurement_required,submitted_at) VALUES(#{ticketNo},#{storeId},#{reporterId},#{assetId},#{categoryId},#{title},#{description},#{facilitySnapshot},#{contactName},#{contactPhone},#{priority},#{status},#{procurementRequired},#{submittedAt})</insert>
+ <update id="setTicketNo">UPDATE repair_tickets SET ticket_no=#{number} WHERE id=#{id}</update>
+ <update id="update">UPDATE repair_tickets SET asset_id=#{assetId},replacement_asset_id=#{replacementAssetId},facility_snapshot=#{facilitySnapshot},priority=#{priority},status=#{status},resolution_plan=#{resolutionPlan},procurement_required=#{procurementRequired},assignee_id=#{assigneeId},assigned_at=#{assignedAt},accepted_at=#{acceptedAt},first_started_at=#{firstStartedAt},completed_repair_at=#{completedRepairAt},submitted_for_acceptance_at=#{submittedForAcceptanceAt},completed_at=#{completedAt},version=version+1 WHERE id=#{id} AND version=#{version}</update>
+ <insert id="occupyAsset">INSERT INTO repair_active_assets(asset_id,ticket_id) VALUES(#{assetId},#{ticketId})</insert>
+ <delete id="releaseAsset">DELETE FROM repair_active_assets WHERE ticket_id=#{ticketId}</delete>
+ <insert id="insertEvent" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_ticket_events(ticket_id,ticket_version,action,from_status,to_status,actor_id,actor_role,visibility,note,payload) VALUES(#{ticketId},#{ticketVersion},#{action},#{fromStatus},#{toStatus},#{actorId},#{actorRole},#{visibility},#{note},#{payload})</insert>
+ <select id="events" resultType="com.gaofeng.repair.ticket.domain.TicketEvent">SELECT e.*,m.display_name AS actor_name FROM repair_ticket_events e JOIN repair_members m ON m.user_id=e.actor_id WHERE e.ticket_id=#{ticketId} <if test="!hq">AND e.visibility='PARTICIPANTS'</if><if test="before!=null">AND e.id&lt;#{before}</if> ORDER BY e.id DESC LIMIT #{size}</select>
+ <select id="recipients" resultType="long">SELECT m.user_id FROM repair_members m WHERE m.status='ACTIVE' AND (m.role='HQ_ADMIN' <if test="!hqOnly">OR (m.role='ENGINEER' AND m.user_id=#{assignee}) OR (m.role='STORE_MANAGER' AND EXISTS(SELECT 1 FROM repair_member_stores ms WHERE ms.user_id=m.user_id AND ms.store_id=#{storeId}))</if>)</select>
+ <select id="latestResult" resultType="com.gaofeng.repair.ticket.domain.TicketEvent">SELECT * FROM repair_ticket_events WHERE ticket_id=#{ticketId} AND action='submit-result' ORDER BY id DESC LIMIT 1</select>
+ <insert id="notify">INSERT INTO repair_notifications(recipient_id,event_id,ticket_id,type,message) VALUES(#{recipient},#{eventId},#{ticketId},#{type},#{message})</insert>
+</mapper>

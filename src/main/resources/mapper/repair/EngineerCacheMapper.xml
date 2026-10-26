@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.cache.mapper.EngineerCacheMapper">
+ <select id="engineers" resultType="long">SELECT user_id FROM repair_members WHERE role='ENGINEER' AND status='ACTIVE' AND user_id&gt;#{after} ORDER BY user_id LIMIT #{size}</select>
+ <select id="owned" resultType="long">SELECT COUNT(*) FROM repair_tickets WHERE assignee_id=#{actor} AND id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></select>
+ <select id="ownersByTickets" resultType="long">SELECT DISTINCT assignee_id FROM repair_tickets WHERE assignee_id IS NOT NULL AND id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></select>
+ <select id="ownersByOrders" resultType="long">SELECT DISTINCT t.assignee_id FROM repair_tickets t JOIN repair_purchase_orders p ON p.ticket_id=t.id WHERE t.assignee_id IS NOT NULL AND p.id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></select>
+ <insert id="heartbeat">INSERT INTO repair_cdc_heartbeat(id,sent_at) VALUES(1,#{sentAt}) ON DUPLICATE KEY UPDATE sent_at=#{sentAt}</insert>
+</mapper>

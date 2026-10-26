@@ -1,0 +1,449 @@
+openapi: 3.0.3
+info:
+  title: 门店设施报修 · 第一阶段 API
+  version: 0.1.0
+  description: 仅覆盖已实现的身份、成员与门店接口。工单、采购和 OCR 尚未开放。
+servers:
+  - url: /api/v1
+security:
+  - bearer: []
+paths:
+  /auth/login:
+    post:
+      summary: 内部成员登录；已有非成员账号可携邀请证明登录
+      security: []
+      parameters:
+        - in: header
+          name: X-Repair-Invitation
+          schema: {type: string}
+          description: 有效邀请 token，仅允许对应邮箱的已有账号验证原密码；签发的非成员会话不能访问业务。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [identifierType, identifier]
+              properties:
+                identifierType: {type: string, enum: [EMAIL, PHONE]}
+                identifier: {type: string}
+                password: {type: string, format: password}
+                code: {type: string}
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user, token]
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id: {$ref: '#/components/schemas/Id'}
+                      email: {type: string}
+                      displayName: {type: string}
+                  token: {$ref: '#/components/schemas/Tokens'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /auth/register:
+    post:
+      summary: 内部系统禁止开放注册
+      security: []
+      responses:
+        '403': {$ref: '#/components/responses/Error'}
+  /auth/token/refresh:
+    post:
+      summary: 检查成员状态与会话代次后轮换 refresh token
+      security: []
+      requestBody: {$ref: '#/components/requestBodies/Refresh'}
+      responses:
+        '200':
+          description: 新令牌对
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Tokens'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /auth/logout:
+    post:
+      summary: 撤销指定刷新令牌
+      security: []
+      requestBody: {$ref: '#/components/requestBodies/Refresh'}
+      responses:
+        '204': {description: 已退出}
+  /auth/me:
+    get:
+      summary: 当前内部成员的最小身份信息
+      responses:
+        '200': {description: id（字符串）、email、displayName}
+        '401': {$ref: '#/components/responses/Error'}
+  /auth/send-code:
+    post:
+      summary: 内部成员邮箱验证码；未配置 SMTP 返回 503
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [identifierType, identifier, scene]
+              properties:
+                identifierType: {type: string, enum: [EMAIL, PHONE]}
+                identifier: {type: string}
+                scene: {type: string, enum: [LOGIN, RESET_PASSWORD, REGISTER]}
+      responses:
+        '200': {description: identifier、scene、expireSeconds、retryAfterSeconds；不返回验证码}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /auth/password/reset:
+    post:
+      summary: 内部成员凭验证码重置密码并撤销刷新令牌
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [identifierType, identifier, code, newPassword]
+              properties:
+                identifierType: {type: string, enum: [EMAIL, PHONE]}
+                identifier: {type: string}
+                code: {type: string}
+                newPassword: {type: string, format: password}
+      responses:
+        '204': {description: 已重置}
+        '400': {$ref: '#/components/responses/Error'}
+  /repair/session:
+    get:
+      summary: 当前身份、资料完整性、实时门店范围与已开放权限
+      responses:
+        '200':
+          description: 当前会话
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Session'}
+        '403': {$ref: '#/components/responses/Error'}
+  /repair/me/profile:
+    patch:
+      summary: 完善当前成员资料
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, displayName, contactPhone]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+                displayName: {type: string, minLength: 1, maxLength: 64}
+                contactPhone: {type: string, maxLength: 32}
+      responses:
+        '200':
+          description: 最新会话
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Session'}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/stores:
+    get:
+      summary: 范围内门店；工程师返回空目录
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: 门店分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: {$ref: '#/components/schemas/Store'}
+    post:
+      summary: 总部新建门店
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody: {$ref: '#/components/requestBodies/Store'}
+      responses:
+        '201': {$ref: '#/components/responses/Store'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/stores/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    put:
+      summary: 总部更新门店；expectedVersion 必填
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody: {$ref: '#/components/requestBodies/Store'}
+      responses:
+        '200': {$ref: '#/components/responses/Store'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/members:
+    get:
+      summary: 总部读取内部成员及授权范围
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Size'}
+      responses:
+        '200':
+          description: 成员分页
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Page'}
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: {$ref: '#/components/schemas/Member'}
+        '403': {$ref: '#/components/responses/Error'}
+  /repair/members/{id}/access:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    put:
+      summary: 总部调整成员角色和门店范围，撤销旧会话
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion, role, storeIds, reason]
+              properties:
+                expectedVersion: {type: integer, minimum: 0}
+                role: {$ref: '#/components/schemas/Role'}
+                storeIds: {type: array, maxItems: 100, uniqueItems: true, items: {$ref: '#/components/schemas/Id'}}
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200': {$ref: '#/components/responses/Member'}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/members/{id}/disable:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: 总部停用成员；保留至少一个 ACTIVE 总部管理员
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody: {$ref: '#/components/requestBodies/Status'}
+      responses:
+        '200': {$ref: '#/components/responses/Member'}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/members/{id}/enable:
+    parameters:
+      - {$ref: '#/components/parameters/Id'}
+    post:
+      summary: 总部启用成员；原会话仍然无效
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody: {$ref: '#/components/requestBodies/Status'}
+      responses:
+        '200': {$ref: '#/components/responses/Member'}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/invitations:
+    post:
+      summary: 总部生成一次性邀请，不自动发邮件
+      parameters:
+        - {$ref: '#/components/parameters/Idempotency'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, role, storeIds]
+              properties:
+                email: {type: string, format: email, maxLength: 128}
+                role: {type: string, enum: [STORE_MANAGER, ENGINEER]}
+                storeIds: {type: array, maxItems: 100, uniqueItems: true, items: {$ref: '#/components/schemas/Id'}}
+      responses:
+        '201':
+          description: id、activationPath（token 在 URL fragment）、expiresAt；72 小时有效
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: {type: string, format: uuid}
+                  activationPath: {type: string}
+                  expiresAt: {type: string, format: date-time}
+        '409': {$ref: '#/components/responses/Error'}
+  /repair/invitations/preview:
+    post:
+      summary: 以邀请凭证预览目标邮箱与角色；token 不放查询字符串
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: {type: string, maxLength: 256}
+      responses:
+        '200': {description: email、role、expiresAt、existingAccount}
+        '410': {$ref: '#/components/responses/Error'}
+  /repair/invitations/accept:
+    post:
+      summary: 原子消费邀请；已有账号必须携验证原密码得到的 access token
+      security:
+        - {}
+        - bearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, displayName]
+              properties:
+                token: {type: string, maxLength: 256}
+                displayName: {type: string, minLength: 1, maxLength: 64}
+                password: {type: string, format: password, description: 新账号必填；已有账号不得提供新密码}
+      responses:
+        '200': {description: userId（字符串）、message；激活后重新登录}
+        '401': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '410': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    Idempotency: {in: header, name: Idempotency-Key, required: true, schema: {type: string, format: uuid}, description: 同操作同内容返回原响应；24 小时有效}
+    Id: {in: path, name: id, required: true, schema: {$ref: '#/components/schemas/Id'}}
+    Page: {in: query, name: page, schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}}
+    Size: {in: query, name: size, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+  requestBodies:
+    Refresh:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [refreshToken]
+            additionalProperties: false
+            properties:
+              refreshToken: {type: string}
+    Store:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [code, name, region, address, status]
+            properties:
+              code: {type: string, pattern: '^[A-Za-z0-9_-]{1,32}$'}
+              name: {type: string, minLength: 1, maxLength: 128}
+              region: {type: string, maxLength: 64}
+              address: {type: string, maxLength: 255}
+              status: {type: string, enum: [ACTIVE, DISABLED]}
+              expectedVersion: {type: integer, minimum: 0, description: 更新必填，新建不得提供}
+    Status:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [expectedVersion, reason]
+            properties:
+              expectedVersion: {type: integer, minimum: 0}
+              reason: {type: string, minLength: 1, maxLength: 500}
+  responses:
+    Error:
+      description: 业务错误；常见 401/403/404/409/410/429/503，不返回 SQL 或堆栈
+      headers:
+        X-Request-Id: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Store:
+      description: 最新门店资料与版本
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Store'}
+    Member:
+      description: 最新成员资料与版本
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Member'}
+  schemas:
+    Id: {type: string, pattern: '^[1-9][0-9]*$'}
+    Role: {type: string, enum: [HQ_ADMIN, STORE_MANAGER, ENGINEER]}
+    Error:
+      type: object
+      required: [code, message, requestId]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        requestId: {type: string}
+    Tokens:
+      type: object
+      properties:
+        accessToken: {type: string}
+        accessTokenExpiresAt: {type: string, format: date-time}
+        refreshToken: {type: string}
+        refreshTokenExpiresAt: {type: string, format: date-time}
+    Page:
+      type: object
+      properties:
+        page: {type: integer}
+        size: {type: integer}
+        total: {type: integer, format: int64}
+    Store:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        code: {type: string}
+        name: {type: string}
+        region: {type: string}
+        address: {type: string}
+        status: {type: string, enum: [ACTIVE, DISABLED]}
+        version: {type: integer}
+    Member:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        email: {type: string}
+        displayName: {type: string}
+        contactPhone: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        status: {type: string, enum: [ACTIVE, DISABLED]}
+        version: {type: integer}
+        stores: {type: array, items: {$ref: '#/components/schemas/Store'}}
+    Session:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/Id'}
+        displayName: {type: string}
+        email: {type: string}
+        contactPhone: {type: string}
+        role: {$ref: '#/components/schemas/Role'}
+        memberVersion: {type: integer}
+        allowedStores: {type: array, items: {$ref: '#/components/schemas/Store'}}
+        repairProfileComplete: {type: boolean}
+        permissions: {type: array, items: {type: string}}

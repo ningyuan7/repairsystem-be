@@ -1,0 +1,105 @@
+server:
+  port: ${REPAIR_PORT:8080}
+  error:
+    include-message: never
+spring:
+  mail:
+    host: ${REPAIR_MAIL_HOST:localhost}
+    port: ${REPAIR_MAIL_PORT:25}
+    username: ${REPAIR_MAIL_USERNAME:}
+    password: ${REPAIR_MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: ${REPAIR_MAIL_AUTH:false}
+      mail.smtp.starttls.enable: ${REPAIR_MAIL_STARTTLS:false}
+      mail.smtp.starttls.required: ${REPAIR_MAIL_STARTTLS_REQUIRED:false}
+      mail.smtp.ssl.enable: ${REPAIR_MAIL_SSL:false}
+      mail.smtp.ssl.checkserveridentity: true
+      mail.smtp.connectiontimeout: 5000
+      mail.smtp.timeout: 10000
+      mail.smtp.writetimeout: 10000
+  application:
+    name: repair-system
+  datasource:
+    url: ${REPAIR_DB_URL:jdbc:mysql://localhost:3306/repair_system?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&characterEncoding=utf8&connectTimeout=3000&socketTimeout=10000}
+    username: ${REPAIR_DB_USERNAME:repair}
+    password: ${REPAIR_DB_PASSWORD:}
+    hikari:
+      connection-init-sql: "SET time_zone = '+00:00'"
+      maximum-pool-size: 10
+  flyway:
+    enabled: true
+    locations: classpath:db/repair/migration
+    clean-disabled: true
+    validate-on-migrate: true
+  sql:
+    init:
+      mode: never
+  data:
+    redis:
+      host: ${REPAIR_REDIS_HOST:localhost}
+      port: ${REPAIR_REDIS_PORT:6379}
+      password: ${REPAIR_REDIS_PASSWORD:}
+      database: ${REPAIR_REDIS_DATABASE:8}
+      timeout: 3s
+  jackson:
+    time-zone: UTC
+    deserialization:
+      fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+mybatis:
+  mapper-locations: classpath:mapper/UserMapper.xml,classpath:mapper/LoginLogMapper.xml,classpath:mapper/repair/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+auth:
+  jwt:
+    issuer: repair-system
+    key-id: repair-local
+    private-key: ${REPAIR_JWT_PRIVATE_KEY:file:./config/keys/private.pem}
+    public-key: ${REPAIR_JWT_PUBLIC_KEY:file:./config/keys/public.pem}
+repair:
+  enabled: true
+  cors-origins: ${REPAIR_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+  read-cache:
+    enabled: ${REPAIR_READ_CACHE_ENABLED:false}
+  canal:
+    enabled: ${REPAIR_CANAL_ENABLED:false}
+    host: ${REPAIR_CANAL_HOST:127.0.0.1}
+    port: ${REPAIR_CANAL_PORT:11112}
+    destination: ${REPAIR_CANAL_DESTINATION:repair}
+    username: ${REPAIR_CANAL_USERNAME:}
+    password: ${REPAIR_CANAL_PASSWORD:}
+  workers:
+    enabled: ${REPAIR_WORKERS_ENABLED:true}
+  sla:
+    review-hours: 4
+    accept-hours: 8
+    repair-hours: 72
+    acceptance-hours: 24
+  ocr:
+    provider: ${REPAIR_OCR_PROVIDER:LOCAL}
+    local-url: ${REPAIR_OCR_LOCAL_URL:http://127.0.0.1:8601/v1/recognize}
+    enabled: ${REPAIR_OCR_ENABLED:false}
+    secret-id: ${REPAIR_OCR_SECRET_ID:}
+    secret-key: ${REPAIR_OCR_SECRET_KEY:}
+    region: ${REPAIR_OCR_REGION:ap-guangzhou}
+    per-minute: 5
+    per-day: 100
+  bootstrap:
+    enabled: ${REPAIR_BOOTSTRAP_ENABLED:false}
+    email: ${REPAIR_BOOTSTRAP_EMAIL:}
+    password: ${REPAIR_BOOTSTRAP_PASSWORD:}
+    name: ${REPAIR_BOOTSTRAP_NAME:总部管理员}
+management:
+  health:
+    mail:
+      enabled: false
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

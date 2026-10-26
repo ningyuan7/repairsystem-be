@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.asset.mapper.AssetMapper">
+ <select id="categories" resultType="com.gaofeng.repair.asset.domain.Category">SELECT * FROM repair_categories <if test="!all">WHERE status='ACTIVE'</if> ORDER BY id DESC</select>
+ <select id="category" resultType="com.gaofeng.repair.asset.domain.Category">SELECT * FROM repair_categories WHERE id=#{id}</select>
+ <select id="lockCategory" resultType="com.gaofeng.repair.asset.domain.Category">SELECT * FROM repair_categories WHERE id=#{id} FOR UPDATE</select>
+ <insert id="insertCategory" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_categories(code,name,status) VALUES(#{code},#{name},#{status})</insert>
+ <update id="updateCategory">UPDATE repair_categories SET code=#{code},name=#{name},status=#{status},version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND version=#{version}</update>
+ <select id="asset" resultType="com.gaofeng.repair.asset.domain.Asset">SELECT * FROM repair_assets WHERE id=#{id}</select>
+ <select id="lockAsset" resultType="com.gaofeng.repair.asset.domain.Asset">SELECT * FROM repair_assets WHERE id=#{id} FOR UPDATE</select>
+ <sql id="scope">WHERE (#{hq}=TRUE OR EXISTS(SELECT 1 FROM repair_member_stores ms WHERE ms.store_id=a.store_id AND ms.user_id=#{actor}))
+   <if test="storeId!=null">AND a.store_id=#{storeId}</if><if test="condition!=null">AND a.health_status=#{condition}</if>
+   <if test="lifecycle!=null">AND a.lifecycle=#{lifecycle}</if>
+   <if test="keyword!=null">AND (a.name LIKE #{keyword} ESCAPE '!' OR a.asset_code LIKE #{keyword} ESCAPE '!' OR a.model LIKE #{keyword} ESCAPE '!')</if>
+ </sql>
+ <select id="list" resultType="com.gaofeng.repair.asset.domain.Asset">SELECT a.* FROM repair_assets a <include refid="scope"/> ORDER BY a.created_at DESC,a.id DESC LIMIT #{size} OFFSET #{offset}</select>
+ <select id="count" resultType="long">SELECT COUNT(*) FROM repair_assets a <include refid="scope"/></select>
+ <insert id="insertAsset" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_assets(store_id,asset_code,name,zone,brand,model,serial_number,lifecycle,health_status,source_purchase_item_id) VALUES(#{storeId},#{assetCode},#{name},#{zone},#{brand},#{model},#{serialNumber},#{lifecycle},#{healthStatus},#{sourcePurchaseItemId})</insert>
+ <update id="updateAsset">UPDATE repair_assets SET store_id=#{storeId},asset_code=#{assetCode},name=#{name},zone=#{zone},brand=#{brand},model=#{model},serial_number=#{serialNumber},lifecycle=#{lifecycle},health_status=#{healthStatus},replaced_by_asset_id=#{replacedByAssetId},version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND version=#{version}</update>
+ <select id="activeTicket" resultType="long">SELECT ticket_id FROM repair_active_assets WHERE asset_id=#{assetId}</select>
+ <update id="updateHealth">UPDATE repair_assets SET health_status=#{health},version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=#{id}</update>
+</mapper>

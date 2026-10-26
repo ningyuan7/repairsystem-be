@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.notification.mapper.NotificationMapper">
+ <sql id="scope">(#{role}='HQ_ADMIN' OR (#{role}='ENGINEER' AND t.assignee_id=#{actor}) OR (#{role}='STORE_MANAGER' AND EXISTS(SELECT 1 FROM repair_member_stores ms WHERE ms.user_id=#{actor} AND ms.store_id=t.store_id)))</sql>
+ <sql id="visible">n.recipient_id=#{actor} AND (e.visibility='PARTICIPANTS' OR #{role}='HQ_ADMIN') AND (<include refid="scope"/> OR n.type='ASSIGNMENT_REMOVED')</sql>
+ <sql id="joins">FROM repair_notifications n JOIN repair_ticket_events e ON e.id=n.event_id JOIN repair_tickets t ON t.id=n.ticket_id</sql>
+ <insert id="insert" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_notifications(recipient_id,event_id,ticket_id,type,message) VALUES(#{recipientId},#{eventId},#{ticketId},#{type},#{message})</insert>
+ <select id="list" resultType="com.gaofeng.repair.notification.domain.Notification">SELECT n.*,n.is_read AS `read`,<include refid="scope"/> AS ticket_accessible <include refid="joins"/> WHERE <include refid="visible"/> ORDER BY n.id DESC LIMIT #{size} OFFSET #{offset}</select>
+ <select id="count" resultType="long">SELECT COUNT(*) <include refid="joins"/> WHERE <include refid="visible"/><if test="unread"> AND n.is_read=FALSE</if></select>
+ <update id="read">UPDATE repair_notifications n JOIN repair_ticket_events e ON e.id=n.event_id JOIN repair_tickets t ON t.id=n.ticket_id SET n.is_read=TRUE,n.read_at=UTC_TIMESTAMP(3) WHERE <include refid="visible"/> AND n.is_read=FALSE AND n.id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach></update>
+ <select id="slaCandidates" resultType="long">SELECT id FROM repair_tickets WHERE id&gt;#{after} AND status IN ('SUBMITTED','ASSIGNED','IN_PROGRESS','WAITING_ACCEPTANCE') ORDER BY id LIMIT 200</select>
+ <select id="marked" resultType="boolean">SELECT EXISTS(SELECT 1 FROM repair_sla_marks WHERE ticket_id=#{ticketId} AND kind=#{kind} AND cycle_key=#{cycle})</select>
+ <insert id="mark">INSERT INTO repair_sla_marks(ticket_id,kind,cycle_key,due_at) VALUES(#{ticketId},#{kind},#{cycle},#{due})</insert>
+ <select id="latestEvent" resultType="long">SELECT id FROM repair_ticket_events WHERE ticket_id=#{ticketId} AND visibility='PARTICIPANTS' ORDER BY id DESC LIMIT 1</select>
+</mapper>

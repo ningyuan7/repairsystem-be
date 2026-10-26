@@ -1,0 +1,11 @@
+# Copy to repair-test.yml only for local integration tests. Never use production credentials.
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/repair_test
+    username: repair_test
+    password: ""
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ""

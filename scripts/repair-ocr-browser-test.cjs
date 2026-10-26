@@ -1,0 +1,22 @@
+const {chromium}=require(process.env.REPAIR_PLAYWRIGHT_MODULE||'playwright');
+const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const backend=process.argv[2];
+if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(backend||'')) throw Error('Isolated localhost backend required');
+const dist=require('./browser-dist.cjs'),out=path.resolve(__dirname,'../target/repair-ocr-browser');
+fs.mkdirSync(out,{recursive:true});
+const server=http.createServer((req,res)=>{
+ if(req.url.startsWith('/api/')){const proxy=http.request(new URL(req.url,backend),{method:req.method,headers:{...req.headers,host:new URL(backend).host}},up=>{res.writeHead(up.statusCode,up.headers);up.pipe(res)});proxy.on('error',()=>{res.writeHead(502);res.end()});req.pipe(proxy);return;}
+ const url=new URL(req.url,'http://127.0.0.1:4877'),file=url.pathname.startsWith('/assets/')?path.join(dist,url.pathname):path.join(dist,'index.html');
+ res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':'text/html');try{res.end(fs.readFileSync(file))}catch{res.writeHead(404);res.end()}
+});
+let browser;
+async function waitLayout(page){await page.waitForFunction(()=>{const s=document.querySelector('.repair-sidebar'),d=document.querySelector('.ant-drawer-open .ant-drawer-content-wrapper');return(innerWidth>=992||!s||s.getBoundingClientRect().width<1)&&(!d||d.getBoundingClientRect().right<=innerWidth+1)});}
+async function choose(page,label,text){await page.getByLabel(label,{exact:true}).press('ArrowDown');await page.locator('.ant-select-dropdown:not(.ant-select-dropdown-hidden)').getByText(text,{exact:true}).click();}
+async function signIn(page,email){await page.getByLabel('工作邮箱').fill(email);await page.getByLabel('密码',{exact:true}).fill('FixtureOnly3579!');await page.locator('button[type="submit"]').click();}
+async function saveAction(page,name){await page.getByRole('button',{name,exact:true}).click();const dialog=page.getByRole('dialog',{name,exact:true});await dialog.getByRole('button',{name:'确认保存',exact:true}).click();await dialog.waitFor({state:'hidden'});}
+(async()=>{
+ await new Promise(resolve=>server.listen(4877,'127.0.0.1',resolve));browser=await chromium.launch({headless:true});const context=await browser.newContext({viewport:{width:1440,height:1000}}),page=await context.newPage(),errors=[];page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:4877/hq/purchases/'+process.argv[3]);await signIn(page,'hq@repair.example');await page.getByRole('heading',{name:'维修采购',exact:true}).waitFor();await page.getByRole('button',{name:'识别订单',exact:true}).click();await page.getByText('候选商品 1',{exact:true}).waitFor();await page.getByText('候选商品 2',{exact:true}).waitFor();assert.equal(await page.locator('.purchase-item').count(),0);await page.screenshot({path:path.join(out,'ocr-candidates-desktop.png'),fullPage:true});
+ await page.getByRole('button',{name:'应用订单字段',exact:true}).click();const confirm=page.getByRole('dialog',{name:'应用识别订单字段',exact:true});await confirm.getByRole('button',{name:'应用字段',exact:true}).click();await confirm.waitFor({state:'hidden'});await page.getByRole('button',{name:'添加候选 1 到采购明细',exact:true}).click();await choose(page,'物品用途','维修配件');await page.getByLabel('采购型号',{exact:true}).fill('OCR-T26-人工校对');await page.getByRole('checkbox',{name:'已人工核对本项物品的品牌和型号',exact:true}).check();await page.getByRole('button',{name:'保存草稿',exact:true}).click();await page.getByText('采购草稿已保存',{exact:true}).waitFor();assert.equal(await page.getByLabel('供应商',{exact:true}).inputValue(),'OCR合成供应商');
+ await page.setViewportSize({width:390,height:844});await waitLayout(page);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);await page.screenshot({path:path.join(out,'ocr-candidates-mobile.png'),fullPage:true});assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,scope:'OCR job polling, suggestions never auto-write, manual application/edit/confirmation and persisted source, Fake provider only',pageErrors:errors}));
+})().catch(async e=>{console.error(e.stack);if(browser)for(const context of browser.contexts())for(const page of context.pages()){await page.screenshot({path:path.join(out,'failure.png'),fullPage:true}).catch(()=>{});fs.writeFileSync(path.join(out,'failure.txt'),await page.locator('body').innerText().catch(()=>''))}process.exitCode=1}).finally(async()=>{if(browser)await browser.close();server.close()});

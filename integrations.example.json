@@ -1,0 +1,17 @@
+{
+  "REPAIR_MAIL_ENABLED": false,
+  "REPAIR_MAIL_HOST": "smtp.qq.com",
+  "REPAIR_MAIL_PORT": 465,
+  "REPAIR_MAIL_USERNAME": "",
+  "REPAIR_MAIL_PASSWORD": "",
+  "REPAIR_MAIL_AUTH": true,
+  "REPAIR_MAIL_SSL": true,
+  "REPAIR_MAIL_STARTTLS": false,
+  "REPAIR_MAIL_STARTTLS_REQUIRED": false,
+  "REPAIR_OCR_ENABLED": false,
+  "REPAIR_OCR_SECRET_ID": "",
+  "REPAIR_OCR_SECRET_KEY": "",
+  "REPAIR_OCR_REGION": "ap-guangzhou",
+  "REPAIR_OCR_PROVIDER": "LOCAL",
+  "REPAIR_OCR_LOCAL_URL": "http://127.0.0.1:8601/v1/recognize"
+}

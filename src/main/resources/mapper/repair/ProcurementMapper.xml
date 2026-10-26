@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.procurement.mapper.ProcurementMapper">
+ <select id="order" resultType="com.gaofeng.repair.procurement.domain.PurchaseOrder">SELECT * FROM repair_purchase_orders WHERE id=#{id}</select>
+ <select id="lockOrder" resultType="com.gaofeng.repair.procurement.domain.PurchaseOrder">SELECT * FROM repair_purchase_orders WHERE id=#{id} FOR UPDATE</select>
+ <select id="active" resultType="com.gaofeng.repair.procurement.domain.PurchaseOrder">SELECT * FROM repair_purchase_orders WHERE ticket_id=#{ticketId} AND status!='CANCELLED'</select>
+ <select id="ordersForTicket" resultType="com.gaofeng.repair.procurement.domain.PurchaseOrder">SELECT * FROM repair_purchase_orders WHERE ticket_id=#{ticketId} ORDER BY id DESC</select>
+ <insert id="insertOrder" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_purchase_orders(ticket_id,status,currency,adjustment_amount,confirmed_total) VALUES(#{ticketId},#{status},#{currency},#{adjustmentAmount},#{confirmedTotal})</insert>
+ <update id="updateOrder">UPDATE repair_purchase_orders SET status=#{status},order_number=#{orderNumber},supplier=#{supplier},ordered_at=#{orderedAt},currency=#{currency},adjustment_amount=#{adjustmentAmount},confirmed_total=#{confirmedTotal},received_at=#{receivedAt},version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND version=#{version}</update>
+ <select id="items" resultType="com.gaofeng.repair.procurement.domain.PurchaseItem">SELECT * FROM repair_purchase_items WHERE purchase_order_id=#{orderId} ORDER BY id</select>
+ <select id="lockItems" resultType="com.gaofeng.repair.procurement.domain.PurchaseItem">SELECT * FROM repair_purchase_items WHERE purchase_order_id=#{orderId} ORDER BY id FOR UPDATE</select>
+ <select id="materialItems" resultType="com.gaofeng.repair.procurement.api.dto.ProcurementDtos$MaterialLine">SELECT id,purpose,name,brand,model,quantity,received_quantity FROM repair_purchase_items WHERE purchase_order_id=#{orderId} ORDER BY id</select>
+ <insert id="insertItem" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_purchase_items(purchase_order_id,purpose,name,brand,model,quantity,unit_price,spec_confirmed,spec_confirmed_by,spec_confirmed_at,source_ocr_job_id,source_candidate_index) VALUES(#{purchaseOrderId},#{purpose},#{name},#{brand},#{model},#{quantity},#{unitPrice},#{specConfirmed},#{specConfirmedBy},#{specConfirmedAt},#{sourceOcrJobId},#{sourceCandidateIndex})</insert>
+ <update id="updateItem">UPDATE repair_purchase_items SET purpose=#{purpose},name=#{name},brand=#{brand},model=#{model},quantity=#{quantity},unit_price=#{unitPrice},spec_confirmed=#{specConfirmed},spec_confirmed_by=#{specConfirmedBy},spec_confirmed_at=#{specConfirmedAt},source_ocr_job_id=#{sourceOcrJobId},source_candidate_index=#{sourceCandidateIndex} WHERE id=#{id} AND purchase_order_id=#{purchaseOrderId} AND received_quantity=0</update>
+ <delete id="deleteItem">DELETE FROM repair_purchase_items WHERE id=#{id} AND received_quantity=0</delete>
+ <update id="receive">UPDATE repair_purchase_items SET received_quantity=received_quantity+#{quantity} WHERE id=#{id} AND purchase_order_id=#{orderId} AND received_quantity+#{quantity}&lt;=quantity</update>
+ <insert id="insertReceipt" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_material_receipts(purchase_order_id,receiver_id,received_at,note,request_key) VALUES(#{purchaseOrderId},#{receiverId},#{receivedAt},#{note},#{requestKey})</insert>
+ <insert id="receiptLine">INSERT INTO repair_material_receipt_items(receipt_id,purchase_item_id,quantity) VALUES(#{receiptId},#{itemId},#{quantity})</insert>
+ <update id="linkReceiptEvent">UPDATE repair_material_receipts SET event_id=#{eventId} WHERE id=#{id}</update>
+ <select id="receipts" resultType="com.gaofeng.repair.procurement.domain.Receipt">SELECT r.*,m.display_name AS receiver_name FROM repair_material_receipts r JOIN repair_members m ON m.user_id=r.receiver_id WHERE r.purchase_order_id=#{orderId} ORDER BY r.received_at DESC,r.id DESC</select>
+ <select id="receiptLines" resultType="com.gaofeng.repair.procurement.api.dto.ProcurementDtos$ReceiptLine">SELECT l.purchase_item_id,i.name,l.quantity FROM repair_material_receipt_items l JOIN repair_purchase_items i ON i.id=l.purchase_item_id WHERE l.receipt_id=#{receiptId} ORDER BY l.purchase_item_id</select>
+ <select id="cost" resultType="com.gaofeng.repair.procurement.domain.Cost">SELECT * FROM repair_cost_confirmations WHERE ticket_id=#{ticketId}</select>
+ <select id="lockCost" resultType="com.gaofeng.repair.procurement.domain.Cost">SELECT * FROM repair_cost_confirmations WHERE ticket_id=#{ticketId} FOR UPDATE</select>
+ <insert id="insertCost">INSERT INTO repair_cost_confirmations(ticket_id,labor_amount,other_amount,note,confirmed_by,confirmed_at) VALUES(#{ticketId},#{laborAmount},#{otherAmount},#{note},#{confirmedBy},#{confirmedAt})</insert>
+ <update id="updateCost">UPDATE repair_cost_confirmations SET labor_amount=#{laborAmount},other_amount=#{otherAmount},note=#{note},confirmed_by=#{confirmedBy},confirmed_at=#{confirmedAt},version=version+1 WHERE ticket_id=#{ticketId} AND version=#{version}</update>
+</mapper>

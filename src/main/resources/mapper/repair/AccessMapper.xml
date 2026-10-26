@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.access.mapper.AccessMapper">
+ <sql id="memberColumns">m.user_id,m.role,m.status,m.display_name,m.contact_phone,m.version,m.auth_version,u.email</sql>
+ <select id="member" resultType="com.gaofeng.repair.access.domain.Member">SELECT <include refid="memberColumns"/> FROM repair_members m JOIN users u ON u.id=m.user_id WHERE m.user_id=#{id}</select>
+ <select id="lockMember" resultType="com.gaofeng.repair.access.domain.Member">SELECT * FROM repair_members WHERE user_id=#{id} FOR UPDATE</select>
+ <select id="members" resultType="com.gaofeng.repair.access.domain.Member">SELECT <include refid="memberColumns"/> FROM repair_members m JOIN users u ON u.id=m.user_id ORDER BY m.created_at DESC,m.user_id DESC LIMIT #{size} OFFSET #{offset}</select>
+ <select id="countMembers" resultType="long">SELECT COUNT(*) FROM repair_members</select>
+ <insert id="insertMember">INSERT INTO repair_members(user_id,role,status,display_name,contact_phone) VALUES(#{userId},#{role},#{status},#{displayName},#{contactPhone})</insert>
+ <update id="updateMember">UPDATE repair_members SET role=#{role},status=#{status},version=version+1,auth_version=auth_version+1,updated_at=UTC_TIMESTAMP(3) WHERE user_id=#{userId} AND version=#{version}</update>
+ <update id="updateProfile">UPDATE repair_members SET display_name=#{displayName},contact_phone=#{contactPhone},version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE user_id=#{userId} AND version=#{version}</update>
+ <select id="stores" resultType="com.gaofeng.repair.access.domain.Store">SELECT s.* FROM repair_stores s <if test="!all">JOIN repair_member_stores ms ON ms.store_id=s.id AND ms.user_id=#{userId}</if> ORDER BY s.created_at DESC,s.id DESC</select>
+ <select id="store" resultType="com.gaofeng.repair.access.domain.Store">SELECT * FROM repair_stores WHERE id=#{id}</select>
+ <select id="lockStore" resultType="com.gaofeng.repair.access.domain.Store">SELECT * FROM repair_stores WHERE id=#{id} FOR UPDATE</select>
+ <insert id="insertStore" useGeneratedKeys="true" keyProperty="id">INSERT INTO repair_stores(code,name,region,address,status) VALUES(#{code},#{name},#{region},#{address},#{status})</insert>
+ <update id="updateStore">UPDATE repair_stores SET code=#{code},name=#{name},region=#{region},address=#{address},status=#{status},version=version+1,updated_at=UTC_TIMESTAMP(3) WHERE id=#{id} AND version=#{version}</update>
+ <insert id="addStore">INSERT INTO repair_member_stores(user_id,store_id) VALUES(#{userId},#{storeId})</insert>
+ <delete id="removeStores">DELETE FROM repair_member_stores WHERE user_id=#{userId}</delete>
+ <select id="governanceLock" resultType="string">SELECT lock_name FROM repair_system_locks WHERE lock_name='hq-role-management' FOR UPDATE</select>
+ <select id="activeHqCount" resultType="long">SELECT COUNT(*) FROM repair_members WHERE role='HQ_ADMIN' AND status='ACTIVE'</select>
+ <insert id="insertInvitation">INSERT INTO repair_invitations(id,email,role,store_ids,token_hash,expires_at,inviter_id) VALUES(#{id},#{email},#{role},#{storeIds},#{tokenHash},#{expiresAt},#{inviterId})</insert>
+ <select id="invitation" resultType="com.gaofeng.repair.access.domain.Invitation">SELECT * FROM repair_invitations WHERE token_hash=#{tokenHash}</select>
+ <select id="lockInvitation" resultType="com.gaofeng.repair.access.domain.Invitation">SELECT * FROM repair_invitations WHERE token_hash=#{tokenHash} FOR UPDATE</select>
+ <update id="consumeInvitation">UPDATE repair_invitations SET consumed_at=UTC_TIMESTAMP(3),version=version+1 WHERE id=#{id} AND consumed_at IS NULL</update>
+ <insert id="audit">INSERT INTO repair_audit_logs(actor_id,action,resource_type,resource_id,request_id,summary) VALUES(#{actor},#{action},#{type},#{id},#{requestId},#{summary})</insert>
+ <select id="idempotency" resultType="com.gaofeng.repair.access.domain.IdempotencyRecord">SELECT request_hash,response_json,http_status,auth_version FROM repair_idempotency_records WHERE user_id=#{userId} AND operation=#{operation} AND idempotency_key=#{key} AND expires_at>UTC_TIMESTAMP(3)</select>
+ <delete id="deleteExpiredIdempotency">DELETE FROM repair_idempotency_records WHERE user_id=#{userId} AND operation=#{operation} AND idempotency_key=#{key} AND expires_at&lt;=UTC_TIMESTAMP(3)</delete>
+ <insert id="reserveIdempotency">INSERT INTO repair_idempotency_records(user_id,operation,idempotency_key,request_hash,auth_version,http_status,response_json,expires_at) VALUES(#{userId},#{operation},#{key},#{hash},#{authVersion},0,'null',#{expires})</insert>
+ <update id="completeIdempotency">UPDATE repair_idempotency_records SET http_status=#{status},response_json=#{json} WHERE user_id=#{userId} AND operation=#{operation} AND idempotency_key=#{key}</update>
+</mapper>

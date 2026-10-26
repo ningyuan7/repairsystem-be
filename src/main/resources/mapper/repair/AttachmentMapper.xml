@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.attachment.mapper.AttachmentMapper">
+ <select id="expired" resultType="com.gaofeng.repair.attachment.domain.Attachment">SELECT * FROM repair_attachments WHERE (status='STAGED' AND expires_at&lt;UTC_TIMESTAMP(3)) OR status='EXPIRED' ORDER BY expires_at,id LIMIT 100 FOR UPDATE SKIP LOCKED</select>
+ <update id="expire">UPDATE repair_attachments SET status='EXPIRED' WHERE id=#{id} AND ((status='STAGED' AND expires_at&lt;UTC_TIMESTAMP(3)) OR status='EXPIRED')</update>
+ <update id="deleted">UPDATE repair_attachments SET status='DELETED' WHERE id=#{id} AND status='EXPIRED'</update>
+ <select id="objectReferenced" resultType="boolean">SELECT EXISTS(SELECT 1 FROM repair_attachments WHERE storage_backend='LOCAL' AND object_key=#{key})</select>
+ <select id="attachment" resultType="com.gaofeng.repair.attachment.domain.Attachment">SELECT * FROM repair_attachments WHERE id=#{id}</select>
+ <select id="lock" resultType="com.gaofeng.repair.attachment.domain.Attachment">SELECT * FROM repair_attachments WHERE id=#{id} FOR UPDATE</select>
+ <insert id="insert">INSERT INTO repair_attachments(id,uploader_id,store_id,ticket_id,purchase_order_id,purpose,storage_backend,object_key,content_type,size,sha256,status,expires_at) VALUES(#{id},#{uploaderId},#{storeId},#{ticketId},#{purchaseOrderId},#{purpose},#{storageBackend},#{objectKey},#{contentType},#{size},#{sha256},#{status},#{expiresAt})</insert>
+ <update id="bind">UPDATE repair_attachments SET status='BOUND',ticket_id=#{ticketId},bound_event_id=#{eventId} WHERE id=#{id} AND uploader_id=#{actor} AND store_id=#{storeId} AND purpose=#{purpose} AND status='STAGED' AND expires_at&gt;UTC_TIMESTAMP(3) AND (ticket_id IS NULL OR ticket_id=#{ticketId})</update>
+ <select id="ticketImages" resultType="com.gaofeng.repair.attachment.domain.Attachment">SELECT * FROM repair_attachments WHERE ticket_id=#{ticketId} AND status='BOUND' AND purpose IN ('FAULT','WORK_RECORD','RESULT') <if test="eventId!=null">AND bound_event_id=#{eventId}</if> ORDER BY created_at,id</select>
+ <select id="purchaseImages" resultType="com.gaofeng.repair.attachment.domain.Attachment">SELECT * FROM repair_attachments WHERE purchase_order_id=#{orderId} AND purpose=#{purpose} AND status='BOUND' <if test="eventId!=null">AND bound_event_id=#{eventId}</if> ORDER BY created_at,id</select>
+</mapper>
