@@ -113,7 +113,11 @@ async function screenshot(page, name) {
   await mobile.getByRole('heading', { name: '欢迎，维修工程师 · 王师傅' }).waitFor();
   assert.equal(await mobile.getByRole('menuitem', { name: '成员与权限' }).count(), 0);
   await screenshot(mobile, 'engineer-mobile');
-  const forbidden = await mobile.evaluate(async () => (await fetch('/api/v1/repair/members', { headers: { Authorization: 'Bearer ' + JSON.parse(localStorage.getItem('repair_auth_tokens')).accessToken } })).status);
+  const forbidden = await mobile.evaluate(async () => {
+    const response = await fetch('/api/v1/auth/token/refresh', {method:'POST',credentials:'include',headers:{'X-Repair-CSRF':'1'}});
+    const token = (await response.json()).accessToken;
+    return (await fetch('/api/v1/repair/members',{headers:{Authorization:'Bearer '+token}})).status;
+  });
   assert.equal(forbidden, 403);
   results.push('HQ invitation → mobile activation → engineer login; server rejects HQ API');
 

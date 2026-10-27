@@ -34,6 +34,15 @@
           "schema" : {
             "type" : "string"
           }
+        }, {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
         } ],
         "responses" : {
           "200" : {
@@ -43,6 +52,12 @@
                 "schema" : {
                   "type" : "string"
                 }
+              },
+              "Set-Cookie" : {
+                "schema" : {
+                  "type" : "string"
+                },
+                "description" : "签发、轮换或清除 HttpOnly 刷新 Cookie；响应 JSON 不包含 Refresh Token。"
               }
             },
             "content" : {
@@ -81,7 +96,8 @@
             "$ref" : "#/components/responses/Error"
           }
         },
-        "security" : [ ]
+        "security" : [ ],
+        "description" : "签发绑定 sid 的 Access Token 到响应体，Refresh Token 仅写 HttpOnly Cookie；登录会话固定最长 7 天。浏览器访问令牌只保存在内存。"
       }
     },
     "/auth/logout" : {
@@ -89,16 +105,32 @@
         "tags" : [ "access" ],
         "operationId" : "RepairAuthController_logout",
         "summary" : "RepairAuthController · logout",
-        "requestBody" : {
+        "parameters" : [ {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
           "required" : true,
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/LogoutRequest"
-              }
-            }
-          }
-        },
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
+        }, {
+          "name" : "Authorization",
+          "in" : "header",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          },
+          "description" : "可选 Bearer Access Token：刷新 Cookie 缺失时撤销该令牌指向的会话；过期或无效令牌不阻止清除 Cookie。"
+        }, {
+          "name" : "__Host-repair_refresh",
+          "in" : "cookie",
+          "required" : false,
+          "schema" : {
+            "type" : "string"
+          },
+          "description" : "HttpOnly / Secure / SameSite=Lax / host-only Cookie；仅本地 HTTP 开发使用 repair_refresh_local。请求体不接受刷新令牌。"
+        } ],
         "responses" : {
           "204" : {
             "description" : "成功",
@@ -107,6 +139,12 @@
                 "schema" : {
                   "type" : "string"
                 }
+              },
+              "Set-Cookie" : {
+                "schema" : {
+                  "type" : "string"
+                },
+                "description" : "签发、轮换或清除 HttpOnly 刷新 Cookie；响应 JSON 不包含 Refresh Token。"
               }
             }
           },
@@ -138,7 +176,8 @@
             "$ref" : "#/components/responses/Error"
           }
         },
-        "security" : [ ]
+        "security" : [ ],
+        "description" : "撤销 Cookie 对应当前 sid，立即阻断该会话所有已签发访问令牌并清除 Cookie；其他设备保持有效。没有有效 Cookie 时幂等返回 204。撤销失败返回错误，客户端不得假报退出成功。"
       }
     },
     "/auth/me" : {
@@ -209,6 +248,16 @@
             }
           }
         },
+        "parameters" : [ {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
+        } ],
         "responses" : {
           "204" : {
             "description" : "成功",
@@ -217,6 +266,12 @@
                 "schema" : {
                   "type" : "string"
                 }
+              },
+              "Set-Cookie" : {
+                "schema" : {
+                  "type" : "string"
+                },
+                "description" : "签发、轮换或清除 HttpOnly 刷新 Cookie；响应 JSON 不包含 Refresh Token。"
               }
             }
           },
@@ -248,7 +303,8 @@
             "$ref" : "#/components/responses/Error"
           }
         },
-        "security" : [ ]
+        "security" : [ ],
+        "description" : "成功后事务内更新密码、递增 auth_version 并撤销账号全部 sid；旧访问令牌与刷新令牌立即失效。"
       }
     },
     "/auth/register" : {
@@ -256,6 +312,16 @@
         "tags" : [ "access" ],
         "operationId" : "RepairAuthController_register",
         "summary" : "RepairAuthController · register",
+        "parameters" : [ {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
+        } ],
         "responses" : {
           "400" : {
             "$ref" : "#/components/responses/Error"
@@ -303,6 +369,16 @@
             }
           }
         },
+        "parameters" : [ {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
+        } ],
         "responses" : {
           "200" : {
             "description" : "成功",
@@ -357,16 +433,24 @@
         "tags" : [ "access" ],
         "operationId" : "RepairAuthController_refresh",
         "summary" : "RepairAuthController · refresh",
-        "requestBody" : {
+        "parameters" : [ {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
           "required" : true,
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/TokenRefreshRequest"
-              }
-            }
-          }
-        },
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
+        }, {
+          "name" : "__Host-repair_refresh",
+          "in" : "cookie",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          },
+          "description" : "HttpOnly / Secure / SameSite=Lax / host-only Cookie；仅本地 HTTP 开发使用 repair_refresh_local。请求体不接受刷新令牌。"
+        } ],
         "responses" : {
           "200" : {
             "description" : "成功",
@@ -375,12 +459,18 @@
                 "schema" : {
                   "type" : "string"
                 }
+              },
+              "Set-Cookie" : {
+                "schema" : {
+                  "type" : "string"
+                },
+                "description" : "签发、轮换或清除 HttpOnly 刷新 Cookie；响应 JSON 不包含 Refresh Token。"
               }
             },
             "content" : {
               "application/json" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/TokenResponse"
+                  "$ref" : "#/components/schemas/RepairAuthController_BrowserToken"
                 }
               }
             }
@@ -413,7 +503,9 @@
             "$ref" : "#/components/responses/Error"
           }
         },
-        "security" : [ ]
+        "security" : [ {
+          "cookieAuth" : [ ]
+        } ]
       }
     },
     "/repair/assets" : {
@@ -1732,6 +1824,16 @@
             }
           }
         },
+        "parameters" : [ {
+          "name" : "X-Repair-CSRF",
+          "in" : "header",
+          "required" : true,
+          "schema" : {
+            "type" : "string",
+            "enum" : [ "1" ]
+          },
+          "description" : "浏览器 AJAX 专用头；Origin 必须精确匹配允许的前端来源。"
+        } ],
         "responses" : {
           "200" : {
             "description" : "成功",
@@ -6509,17 +6611,6 @@
         },
         "required" : [ "identifierType", "identifier" ]
       },
-      "LogoutRequest" : {
-        "type" : "object",
-        "additionalProperties" : false,
-        "properties" : {
-          "refreshToken" : {
-            "type" : "string",
-            "minLength" : 1
-          }
-        },
-        "required" : [ "refreshToken" ]
-      },
       "NotificationDtos_Feed" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -7547,6 +7638,26 @@
         },
         "required" : [ "expectedVersion", "expectedTicketVersion" ]
       },
+      "RepairAuthController_BrowserToken" : {
+        "type" : "object",
+        "additionalProperties" : false,
+        "properties" : {
+          "accessToken" : {
+            "type" : "string",
+            "nullable" : true
+          },
+          "accessTokenExpiresAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "nullable" : true
+          },
+          "refreshTokenExpiresAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "nullable" : true
+          }
+        }
+      },
       "RepairAuthController_Identity" : {
         "type" : "object",
         "additionalProperties" : false,
@@ -7579,7 +7690,7 @@
           },
           "token" : {
             "allOf" : [ {
-              "$ref" : "#/components/schemas/TokenResponse"
+              "$ref" : "#/components/schemas/RepairAuthController_BrowserToken"
             } ],
             "nullable" : true
           }
@@ -8542,41 +8653,6 @@
             "nullable" : true
           }
         }
-      },
-      "TokenRefreshRequest" : {
-        "type" : "object",
-        "additionalProperties" : false,
-        "properties" : {
-          "refreshToken" : {
-            "type" : "string",
-            "minLength" : 1
-          }
-        },
-        "required" : [ "refreshToken" ]
-      },
-      "TokenResponse" : {
-        "type" : "object",
-        "additionalProperties" : false,
-        "properties" : {
-          "accessToken" : {
-            "type" : "string",
-            "nullable" : true
-          },
-          "accessTokenExpiresAt" : {
-            "type" : "string",
-            "format" : "date-time",
-            "nullable" : true
-          },
-          "refreshToken" : {
-            "type" : "string",
-            "nullable" : true
-          },
-          "refreshTokenExpiresAt" : {
-            "type" : "string",
-            "format" : "date-time",
-            "nullable" : true
-          }
-        }
       }
     },
     "securitySchemes" : {
@@ -8584,6 +8660,12 @@
         "type" : "http",
         "scheme" : "bearer",
         "bearerFormat" : "JWT"
+      },
+      "cookieAuth" : {
+        "type" : "apiKey",
+        "in" : "cookie",
+        "name" : "__Host-repair_refresh",
+        "description" : "生产 HTTPS 的 HttpOnly 刷新 Cookie；本地 HTTP 模式使用 repair_refresh_local"
       }
     },
     "responses" : {

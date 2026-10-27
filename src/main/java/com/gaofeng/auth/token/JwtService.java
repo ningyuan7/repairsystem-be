@@ -56,6 +56,9 @@ public class JwtService {
         return new TokenPair(accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, refreshTokenId);
     }
 
+    /** Refresh implementations may keep one stable revocable session across rotations. */
+    public TokenPair rotateTokenPair(User user,Jwt refresh) { return issueTokenPair(user); }
+
     /**
      * 解码 JWT 字符串为 {@link Jwt}。
      *

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class RepairAccess {
     private final AccessMapper mapper;
+    private final LoginSessions sessions;
     public Member active(long id) {
         Member member=mapper.member(id);
         if(member==null) throw new RepairException(403,"MEMBERSHIP_REQUIRED","请先通过内部邀请加入系统");
@@ -19,6 +20,7 @@ public class RepairAccess {
     }
     public Member authenticated(Jwt jwt) {
         if(jwt==null) throw new RepairException(401,"UNAUTHORIZED","请先登录");
+        sessions.authenticated(jwt);
         long id=userId(jwt);
         Member member=active(id);
         Object epoch=jwt.getClaims().get("repair_auth_version");

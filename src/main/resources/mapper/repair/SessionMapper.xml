@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.gaofeng.repair.access.mapper.SessionMapper">
+ <select id="lockUser" resultType="long">SELECT id FROM users WHERE id=#{id} FOR UPDATE</select>
+ <select id="session" resultType="com.gaofeng.repair.access.domain.LoginSession">SELECT * FROM repair_login_sessions WHERE id=#{id}</select>
+ <select id="lockSession" resultType="com.gaofeng.repair.access.domain.LoginSession">SELECT * FROM repair_login_sessions WHERE id=#{id} FOR UPDATE</select>
+ <insert id="insertSession">INSERT INTO repair_login_sessions(id,user_id,auth_version,expires_at) VALUES(#{id},#{userId},#{authVersion},#{expiresAt})</insert>
+ <update id="revoke">UPDATE repair_login_sessions SET revoked_at=COALESCE(revoked_at,UTC_TIMESTAMP(3)) WHERE id=#{id} AND user_id=#{userId}</update>
+ <update id="revokeAll">UPDATE repair_login_sessions SET revoked_at=COALESCE(revoked_at,UTC_TIMESTAMP(3)) WHERE user_id=#{userId} AND revoked_at IS NULL</update>
+ <update id="bumpAuthVersion">UPDATE repair_members SET auth_version=auth_version+1,updated_at=UTC_TIMESTAMP(3) WHERE user_id=#{userId}</update>
+ <delete id="purgeExpired">DELETE FROM repair_login_sessions WHERE expires_at&lt;UTC_TIMESTAMP(3) LIMIT 1000</delete>
+</mapper>

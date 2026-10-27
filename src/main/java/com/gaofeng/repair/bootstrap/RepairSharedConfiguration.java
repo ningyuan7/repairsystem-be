@@ -29,8 +29,8 @@ public class RepairSharedConfiguration {
             flyway.migrate();
         };
     }
-    @Bean JwtService jwtService(JwtEncoder encoder,JwtDecoder decoder,AuthProperties properties,AccessMapper mapper) {
-        return new RepairJwtService(encoder,decoder,properties,mapper);
+    @Bean JwtService jwtService(JwtEncoder encoder,JwtDecoder decoder,AuthProperties properties,AccessMapper mapper,com.gaofeng.repair.access.mapper.SessionMapper sessions,com.gaofeng.repair.access.service.LoginSessions validation) {
+        return new RepairJwtService(encoder,decoder,properties,mapper,sessions,validation);
     }
     @Bean Jackson2ObjectMapperBuilderCustomizer stringIds() {
         return builder->builder.serializerByType(Long.class,ToStringSerializer.instance);

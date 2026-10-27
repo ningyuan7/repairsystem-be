@@ -60,6 +60,9 @@ auth:
     private-key: ${REPAIR_JWT_PRIVATE_KEY:file:./config/keys/private.pem}
     public-key: ${REPAIR_JWT_PUBLIC_KEY:file:./config/keys/public.pem}
 repair:
+  auth:
+    cookie-secure: ${REPAIR_AUTH_COOKIE_SECURE:true}
+    cookie-same-site: ${REPAIR_AUTH_COOKIE_SAME_SITE:Lax}
   enabled: true
   cors-origins: ${REPAIR_CORS_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   read-cache:

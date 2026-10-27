@@ -202,7 +202,7 @@ public class AuthService {
         if (!refreshTokenStore.consumeToken(userId, tokenId)) {
             throw new BusinessException(ErrorCode.REFRESH_TOKEN_INVALID);
         }
-        TokenPair tokenPair = jwtService.issueTokenPair(user);
+        TokenPair tokenPair = jwtService.rotateTokenPair(user, jwt);
         storeRefreshToken(userId, tokenPair);
 
         return mapToken(tokenPair);

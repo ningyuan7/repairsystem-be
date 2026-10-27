@@ -34,7 +34,9 @@ class RepairIdentityIntegrationTest {
     static HttpClient client=HttpClient.newHttpClient();
     static String base,hq,hq2;
     static final String PASSWORD="FixtureOnly3579!";
-    record Result(int status,JsonNode body,String requestId) {}
+    record Result(int status,JsonNode body,String requestId,HttpHeaders headers) {
+        Result(int status,JsonNode body,String requestId){this(status,body,requestId,HttpHeaders.of(Map.of(),(a,b)->true));}
+    }
     @BeforeAll static void prepare() throws Exception { prepareWith(Map.of()); }
     @SuppressWarnings("unchecked") static void prepareWith(Map<String,Object> overrides,Class<?>... sources) throws Exception {
         Map<String,Object> config=Map.of();
@@ -79,6 +81,7 @@ class RepairIdentityIntegrationTest {
         defaults.put("repair.bootstrap.password",PASSWORD); defaults.put("repair.bootstrap.name","测试总部");
         defaults.put("auth.password.bcrypt-strength",4);
         defaults.put("repair.cors-origins","http://127.0.0.1:4877");
+        defaults.put("repair.auth.cookie-secure",false);
         defaults.put("app.protection.auth-ip-per-minute",1000); defaults.put("app.protection.login-account-per-ten-minutes",1000);
         defaults.put("repair.workers.enabled",false); defaults.putAll(overrides);
         SpringApplication application=new SpringApplication(RepairApplication.class);
@@ -106,11 +109,12 @@ class RepairIdentityIntegrationTest {
     }
     static Result request(String method,String path,Object body,String token,String key) throws Exception {
         var builder=HttpRequest.newBuilder(URI.create(base+path)).header("Content-Type","application/json");
+        if(!Set.of("GET","HEAD","OPTIONS").contains(method) && (path.startsWith("/api/v1/auth/") || path.equals("/api/v1/repair/invitations/accept"))) builder.header("X-Repair-CSRF","1");
         if(token!=null) builder.header("Authorization","Bearer "+token);
         if(key!=null) builder.header("Idempotency-Key",key);
         builder.method(method,body==null?HttpRequest.BodyPublishers.noBody():HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)));
         var response=client.send(builder.build(),HttpResponse.BodyHandlers.ofString());
-        return new Result(response.statusCode(),response.body().isBlank()?json.nullNode():json.readTree(response.body()),response.headers().firstValue("X-Request-Id").orElse(""));
+        return new Result(response.statusCode(),response.body().isBlank()?json.nullNode():json.readTree(response.body()),response.headers().firstValue("X-Request-Id").orElse(""),response.headers());
     }
     static Result write(String method,String path,Object body,String token) throws Exception { return request(method,path,body,token,UUID.randomUUID().toString()); }
     static Result login(String email) throws Exception { return request("POST","/api/v1/auth/login",Map.of("identifierType","EMAIL","identifier",email,"password",PASSWORD),null,null); }
@@ -168,11 +172,11 @@ class RepairIdentityIntegrationTest {
     }
     @Test @Order(4) void disabledMemberAndOldGenerationCannotAccessOrRefresh() throws Exception {
         var login=login("engineer@repair.example");
-        String accessToken=login.body.path("token").path("accessToken").asText(),refresh=login.body.path("token").path("refreshToken").asText();
+        String accessToken=login.body.path("token").path("accessToken").asText(),refresh=login.headers.firstValue("Set-Cookie").orElseThrow().split(";",2)[0].split("=",2)[1];
         String id=login.body.path("user").path("id").asText();
         assertThat(write("POST","/api/v1/repair/members/"+id+"/disable",Map.of("expectedVersion",0,"reason","测试停用"),hq).status).isEqualTo(200);
         assertThat(request("GET","/api/v1/repair/session",null,accessToken,null).body.path("code").asText()).isEqualTo("MEMBER_DISABLED");
-        assertThat(request("POST","/api/v1/auth/token/refresh",Map.of("refreshToken",refresh),null,null).status).isEqualTo(403);
+        assertThat(RepairSessionSecurityIntegrationTest.cookiePost("/api/v1/auth/token/refresh","repair_refresh_local="+refresh).statusCode()).isEqualTo(403);
         assertThat(write("POST","/api/v1/repair/members/"+id+"/enable",Map.of("expectedVersion",1,"reason","测试恢复"),hq).status).isEqualTo(200);
         assertThat(request("GET","/api/v1/repair/session",null,accessToken,null).body.path("code").asText()).isEqualTo("SESSION_REVOKED");
         assertThat(request("GET","/api/v1/repair/session",null,refresh,null).status).isEqualTo(401);
@@ -206,7 +210,7 @@ class RepairIdentityIntegrationTest {
         assertThat(login(existing.getEmail()).status).isEqualTo(401);
         assertThat(request("POST","/api/v1/repair/invitations/accept",Map.of("token",token,"displayName","已有账号"),null,null).body.path("code").asText()).isEqualTo("INVITATION_LOGIN_REQUIRED");
         var proofRequest=HttpRequest.newBuilder(URI.create(base+"/api/v1/auth/login")).header("Content-Type","application/json").header("X-Repair-Invitation",token)
-                .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(Map.of("identifierType","EMAIL","identifier",existing.getEmail(),"password",PASSWORD)))).build();
+                .header("X-Repair-CSRF","1").POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(Map.of("identifierType","EMAIL","identifier",existing.getEmail(),"password",PASSWORD)))).build();
         var proof=client.send(proofRequest,HttpResponse.BodyHandlers.ofString());
         assertThat(proof.statusCode()).isEqualTo(200);
         String accessToken=json.readTree(proof.body()).path("token").path("accessToken").asText();

@@ -1,3 +1,5 @@
+> 认证协议已升级：Access Token 仅保存在内存，Refresh Token 仅使用 HttpOnly Cookie；刷新和退出不再从 JSON 传入刷新令牌。当前登录态协议见 [可撤销浏览器会话](17-revocable-browser-sessions.md)。
+
 # 接口与前端页面契约
 
 本合同是完整目标 API；第一阶段已实现的接口以 [OpenAPI](openapi-phase1.yaml) 和 [交付记录](08-phase1-delivery.md) 为准。后续工单、采购、OCR 等仍待开发。

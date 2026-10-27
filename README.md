@@ -2,6 +2,12 @@
 
 面向连锁门店内部：门店提交设施报修，总部审核并采购配件或替换设备，上传订单图并通过 OCR 辅助填写，派单给工程师维修，门店验收，总部汇总费用和时效。
 
+## 应用预览
+
+![门店设施报修系统总部工作台：工单待办与工程师派单一览](docs/images/hq-dashboard.png)
+
+总部工作台展示待审核、待采购、待派单、待验收概览，以及待协调事项和工程师任务分布。截图使用隔离演示数据。
+
 这是独立 Java 后端仓库，前端单独维护于 RepairSystem-frontend。JDK 21 / Maven 3.9+ / Spring Boot 3.2.4 / MyBatis / MySQL 8 / Redis / Flyway / Spring Security JWT；可选 Canal 工程师列表预热和本地 OCR，不依赖前端或其他项目源码。
 
 ```text
@@ -38,3 +44,5 @@ services/ocr/    可选本地 OCR 推理服务
 - [业务文档](docs/repair-system/README.md)
 - [前后端仓库拆分说明](docs/repository-split.md)
 - [Canal 缓存与预热](docs/repair-system/15-canal-engineer-cache.md)
+
+登录态采用可撤销 sid、内存 Access Token 与 HttpOnly Refresh Cookie；退出当前会话即时失效，重置密码撤销全部会话。生产默认 Secure Cookie，HTTP 本地开发需显式设置 REPAIR_AUTH_COOKIE_SECURE=false。详见 [登录态安全与部署配置](docs/repair-system/17-revocable-browser-sessions.md)。
